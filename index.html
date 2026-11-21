@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1d4ed8">
+<title>Routine – Aufgaben</title>
+<style>
+  :root { --blau:#1d4ed8; --blau-hell:#dbe4ff; --rot:#c62828; --gruen:#1b7f3a; --grau:#6b7280; --rand:#d6d9e0; --bg:#f4f5f8; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:#111; }
+  header { position:sticky; top:0; z-index:5; background:var(--blau); color:#fff; padding:12px 16px; box-shadow:0 2px 6px rgba(0,0,0,.15); }
+  header h1 { margin:0 0 8px; font-size:20px; }
+  .leiste { display:flex; gap:8px; flex-wrap:wrap; }
+  button { font:inherit; border:1px solid var(--rand); background:#fff; color:#111; border-radius:10px; padding:8px 12px; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  header button { border:0; padding:10px 14px; font-weight:600; }
+  header button.haupt { background:#ffd84d; }
+  #status { margin-top:8px; font-size:14px; min-height:1.4em; }
+  #status.fehler { color:#ffd0d0; font-weight:600; }
+  #status.ok { color:#c9ffd6; font-weight:600; }
+  main { max-width:680px; margin:0 auto; padding:16px; }
+  .routine { background:#fff; border:1px solid var(--rand); border-radius:14px; padding:12px; margin-bottom:16px; }
+  .kopf { display:flex; gap:6px; align-items:center; margin-bottom:10px; }
+  .kopf input { flex:1; font-weight:700; font-size:18px; }
+  .routine.zu .kopf { margin-bottom:0; }
+  .klapp { width:44px; padding:8px 0; font-size:18px; background:var(--blau-hell); border-color:var(--blau-hell); color:var(--blau); }
+  .anzahl { font-size:13px; color:var(--grau); white-space:nowrap; }
+  input, select { font:inherit; border:1px solid var(--rand); border-radius:8px; padding:8px; min-width:0; background:#fff; }
+  .aufgabe { border:1px solid var(--rand); border-left:4px solid var(--blau); border-radius:10px; padding:10px; margin-bottom:10px; background:#fafbff; }
+  .zeile { display:flex; gap:6px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+  .zeile .name { flex:1; font-weight:600; }
+  .zeile .details { flex:1; }
+  .klein { width:42px; padding:8px 0; text-align:center; }
+  label.feld { display:flex; flex-direction:column; font-size:13px; color:var(--grau); gap:2px; }
+  label.feld input { width:90px; }
+  .tage { display:flex; gap:4px; flex-wrap:wrap; align-items:center; }
+  .tage span { font-size:13px; color:var(--grau); margin-right:4px; }
+  .tag { padding:6px 0; width:38px; border-radius:8px; font-size:14px; }
+  .tag.an { background:var(--blau); color:#fff; border-color:var(--blau); }
+  .hinweis { font-size:13px; color:#9a5b00; margin-top:4px; }
+  .hinweis.stop { color:var(--rot); font-weight:600; }
+  .plus { width:100%; border-style:dashed; color:var(--blau); font-weight:600; }
+  .loeschen-sicher { background:var(--rot); color:#fff; border-color:var(--rot); }
+  details { background:#fff; border:1px solid var(--rand); border-radius:14px; padding:12px; margin-top:8px; }
+  summary { cursor:pointer; font-weight:600; }
+  details p { font-size:14px; color:#333; }
+  textarea { width:100%; height:180px; font:12px/1.3 ui-monospace, Menlo, Consolas, monospace; border:1px solid var(--rand); border-radius:8px; padding:8px; }
+  .erklaerung { font-size:13px; color:var(--grau); margin:0 0 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Routine – Aufgaben für die Uhr</h1>
+  <div class="leiste">
+    <button id="btnLaden">Von Uhr laden</button>
+    <button id="btnSpeichern" class="haupt">Auf Uhr speichern</button>
+  </div>
+  <div id="status"></div>
+</header>
+
+<main>
+  <p class="erklaerung">Minuten = Countdown (leer = keiner). Erinnerung = wie oft die Uhr vibriert, solange die Aufgabe läuft. Tage: alle blau = jeden Tag.</p>
+  <div id="routinen"></div>
+  <button class="plus" id="btnNeueRoutine">+ Routine</button>
+
+  <details>
+    <summary>Erweitert</summary>
+    <p><b>App-Symbol und App-Eintrag auf der Uhr anlegen.</b> Nur nötig, wenn die Uhr neu ist oder zurückgesetzt wurde. Die App selbst (<code>routine.app.js</code>) lädst du einmal über die Espruino Web IDE hoch.</p>
+    <button id="btnSymbol">Symbol &amp; App-Eintrag anlegen</button>
+    <p><b>einrichten.js erzeugen.</b> Falls Bluetooth im Browser mal nicht geht: Diesen Text in die linke Konsole der Espruino Web IDE einfügen und Enter drücken.</p>
+    <button id="btnSkript">einrichten.js erzeugen</button>
+    <button id="btnKopieren">Kopieren</button>
+    <textarea id="skript" readonly placeholder="Hier erscheint der Code …"></textarea>
+    <p><b>Zurücksetzen.</b> Lädt die ursprünglichen Standard-Aufgaben in die Bearbeitung (auf der Uhr ändert sich erst etwas beim Speichern).</p>
+    <button id="btnStandard">Standard-Aufgaben laden</button>
+  </details>
+</main>
+
+<script>
+"use strict";
+
+// ---------- Standard-Aufgaben (wie in einrichten.js) ----------
+const STANDARD = {
+  "Morgens": [
+    {t:"Ausziehen", d:["PJ"], m:1, r:0},
+    {t:"Anziehen", d:["Unterwäsche","Socken","Hose","Oberteil"], m:5, r:1},
+    {t:"Zähneputzen", m:7, r:2},
+    {t:"Schuhe & Jacke", m:5, r:0.5},
+    {t:"Tasche mitnehmen", m:3, r:1}
+  ],
+  "Mittags": [
+    {t:"Würfelhaus", m:20, r:0},
+    {t:"Hausaufgaben", m:90, r:0, w:[5,6,0]}
+  ],
+  "Abends": [
+    {t:"Bett ready", d:["Ausziehen","PJ anziehen"], m:3, r:0.5},
+    {t:"Zähneputzen", d:["Zahnspange rein machen"], m:7, r:2},
+    {t:"Geräte raus", m:3, r:1.5},
+    {t:"Tasche packen", m:10, r:2}
+  ]
+};
+
+const SYMBOL = "MDABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAD/4AAAAAD/wAAAAADBwAAAAADDw////4Djw////4D3w////4D+w////4DcwAAAAAD/wAAAAAD/wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAD/4AAAAAD/wAAAAADBwAAAAADDw////4Djw////4D3w////4D+w////4DcwAAAAAD/wAAAAAD/wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD/wAAAAAD/wAAAAADAwAAAAADAw////4DAw////4DAw////4DAw////4DAwAAAAAD/wAAAAAD/wAAAAAAAAAAAAAAAAAAAAA";
+const INFO = {id:"routine", name:"Routine", src:"routine.app.js", icon:"routine.img", type:"app"};
+
+const TAGE = [[1,"Mo"],[2,"Di"],[3,"Mi"],[4,"Do"],[5,"Fr"],[6,"Sa"],[0,"So"]];
+const ERINNERUNG = [
+  ["",    "Standard (0:15, 0:30, 1:00 …)"],
+  ["0",   "keine"],
+  ["0.5", "alle 30 Sek."],
+  ["1",   "jede Minute"],
+  ["1.5", "alle 1:30 Min."],
+  ["2",   "alle 2 Min."],
+  ["3",   "alle 3 Min."],
+  ["5",   "alle 5 Min."],
+  ["10",  "alle 10 Min."]
+];
+const NAME_LANG = 16;   // ab hier wird die Schrift auf der Uhr deutlich kleiner
+const MAX_DETAILS = 4;  // mehr Unterpunkte passen nicht unter den Countdown
+
+// ---------- Datenmodell ----------
+// routinen = [{name, tasks:[{t, d:"a, b", m:"5", r:"1", w:[..]|null}]}]
+let routinen = [];
+let gespeichertStand = "";
+
+function ausJSON(obj) {
+  return Object.keys(obj || {}).map(name => ({
+    name, zu: true,
+    tasks: (Array.isArray(obj[name]) ? obj[name] : []).map(a => ({
+      t: a.t || "",
+      d: Array.isArray(a.d) ? a.d.join(", ") : "",
+      m: (a.m === undefined || a.m === null || a.m === 0) ? "" : String(a.m),
+      r: (a.r === undefined || a.r === null) ? "" : String(a.r),
+      w: Array.isArray(a.w) ? a.w.slice() : null
+    }))
+  }));
+}
+
+// Typografische Zeichen in einfache umwandeln, damit die Uhr sie anzeigen kann
+function sauber(s) {
+  return String(s).trim()
+    .replace(/[„“”«»]/g, '"').replace(/[‚‘’`´]/g, "'")
+    .replace(/[–—]/g, "-").replace(/…/g, "...").replace(/\s+/g, " ");
+}
+function hatUnbekannteZeichen(s) { return /[^\x20-\x7e\xa0-\xff]/u.test(sauber(s)); }
+
+function zuJSON() {
+  const obj = {};
+  routinen.forEach(r => {
+    const name = sauber(r.name);
+    obj[name] = r.tasks.filter(a => sauber(a.t)).map(a => {
+      const auf = {t: sauber(a.t)};
+      const d = a.d.split(",").map(sauber).filter(Boolean);
+      if (d.length) auf.d = d;
+      const m = parseFloat(String(a.m).replace(",", "."));
+      if (m > 0) auf.m = m;
+      if (a.r !== "") auf.r = Number(a.r);
+      if (a.w && a.w.length < 7) auf.w = a.w.slice().sort((x, y) => ((x + 6) % 7) - ((y + 6) % 7));
+      return auf;
+    });
+  });
+  return obj;
+}
+
+function pruefen() {
+  const namen = new Set();
+  for (const r of routinen) {
+    const n = sauber(r.name);
+    if (!n) return "Eine Routine hat keinen Namen.";
+    if (namen.has(n)) return "Der Routinen-Name „" + n + "“ kommt doppelt vor.";
+    namen.add(n);
+    const aufgaben = r.tasks.filter(a => sauber(a.t));
+    if (!aufgaben.length) return "„" + n + "“ hat keine Aufgabe.";
+    for (const a of aufgaben) if (a.w && !a.w.length) return "„" + sauber(a.t) + "“ (" + n + ") ist an keinem Tag aktiv.";
+  }
+  if (!routinen.length) return "Es gibt keine Routine.";
+  return "";
+}
+
+// JSON fuer die Uhr: Umlaute als \xE4 usw., alles andere Unbekannte als ?
+function fuerUhr(obj) {
+  return JSON.stringify(obj).replace(/[^\x20-\x7e]/gu, ch => {
+    const c = ch.codePointAt(0);
+    return c < 256 ? "\\x" + c.toString(16).toUpperCase().padStart(2, "0") : "?";
+  });
+}
+
+// ---------- Entwurf im Browser merken ----------
+function entwurfSpeichern() {
+  try { localStorage.setItem("routine-entwurf", JSON.stringify(routinen)); } catch (e) {}
+  geaendertAnzeigen();
+}
+function entwurfLaden() {
+  try { const t = localStorage.getItem("routine-entwurf"); if (t) return JSON.parse(t); } catch (e) {}
+  return null;
+}
+function geaendertAnzeigen() {
+  const s = document.getElementById("status");
+  if (s.dataset.fest) return;
+  const jetzt = JSON.stringify(zuJSON());
+  if (gespeichertStand && jetzt !== gespeichertStand) status("Geändert – noch nicht auf der Uhr.");
+  else if (gespeichertStand) status("Alles ist auf der Uhr.", "ok");
+}
+
+// ---------- Anzeige ----------
+const $ = id => document.getElementById(id);
+function el(tag, attrs, ...kinder) {
+  const e = document.createElement(tag);
+  for (const k in attrs || {}) {
+    if (k.startsWith("on")) e.addEventListener(k.slice(2), attrs[k]);
+    else if (k === "class") e.className = attrs[k];
+    else e.setAttribute(k, attrs[k]);
+  }
+  kinder.forEach(c => c != null && e.append(c));
+  return e;
+}
+function verschieben(liste, i, d) {
+  const j = i + d;
+  if (j < 0 || j >= liste.length) return;
+  [liste[i], liste[j]] = [liste[j], liste[i]];
+  aendern(true);
+}
+function aendern(neuZeichnen) { if (neuZeichnen) zeichnen(); entwurfSpeichern(); }
+
+function hinweiseFuer(a) {
+  const h = [];
+  if (sauber(a.t).length > NAME_LANG) h.push("Langer Name – wird auf der Uhr klein. Besser kürzer, Rest in die Details.");
+  const d = a.d.split(",").map(sauber).filter(Boolean);
+  if (d.length > MAX_DETAILS) h.push("Mehr als " + MAX_DETAILS + " Details passen nicht aufs Display.");
+  if (hatUnbekannteZeichen(a.t) || hatUnbekannteZeichen(a.d)) h.push("Emojis/Sonderzeichen werden auf der Uhr zu „?“.");
+  if (a.w && !a.w.length) h.push("STOP:An keinem Tag aktiv – mindestens einen Tag wählen.");
+  return h;
+}
+function hinweiseZeigen(box, a) {
+  box.replaceChildren(...hinweiseFuer(a).map(t =>
+    el("div", {class: "hinweis" + (t.startsWith("STOP:") ? " stop" : "")}, t.replace("STOP:", ""))));
+}
+
+function zeichneAufgabe(r, i) {
+  const a = r.tasks[i];
+  const hinweis = el("div");
+  const name = el("input", {class: "name", value: a.t, placeholder: "Aufgabe", "aria-label": "Aufgabe",
+    oninput: e => { a.t = e.target.value; hinweiseZeigen(hinweis, a); aendern(); }});
+  const details = el("input", {class: "details", value: a.d, placeholder: "Details, mit Komma getrennt (optional)",
+    oninput: e => { a.d = e.target.value; hinweiseZeigen(hinweis, a); aendern(); }});
+  const minuten = el("input", {type: "number", min: "0", step: "1", inputmode: "decimal", value: a.m, placeholder: "–",
+    oninput: e => { a.m = e.target.value; aendern(); }});
+  const erinnerung = el("select", {onchange: e => { a.r = e.target.value; aendern(); }});
+  const optionen = ERINNERUNG.slice();
+  if (!optionen.some(o => o[0] === a.r)) optionen.push([a.r, "alle " + a.r + " Min."]);
+  optionen.forEach(([w, t]) => { const o = el("option", {value: w}, t); if (w === a.r) o.selected = true; erinnerung.append(o); });
+
+  const tage = el("div", {class: "tage"}, el("span", {}, "Tage:"));
+  TAGE.forEach(([nr, kurz]) => {
+    const b = el("button", {type: "button", class: "tag" + (!a.w || a.w.includes(nr) ? " an" : "")}, kurz);
+    b.addEventListener("click", () => {
+      let w = a.w ? a.w.slice() : TAGE.map(x => x[0]);
+      w = w.includes(nr) ? w.filter(x => x !== nr) : w.concat(nr);
+      a.w = w.length === 7 ? null : w;
+      b.classList.toggle("an");
+      hinweiseZeigen(hinweis, a); aendern();
+    });
+    tage.append(b);
+  });
+
+  hinweiseZeigen(hinweis, a);
+  return el("div", {class: "aufgabe"},
+    el("div", {class: "zeile"}, name,
+      el("button", {class: "klein", title: "nach oben", onclick: () => verschieben(r.tasks, i, -1)}, "↑"),
+      el("button", {class: "klein", title: "nach unten", onclick: () => verschieben(r.tasks, i, 1)}, "↓"),
+      el("button", {class: "klein", title: "löschen", onclick: () => { r.tasks.splice(i, 1); aendern(true); }}, "✕")),
+    el("div", {class: "zeile"}, details),
+    el("div", {class: "zeile"},
+      el("label", {class: "feld"}, "Minuten", minuten),
+      el("label", {class: "feld"}, "Erinnerung", erinnerung)),
+    tage, hinweis);
+}
+
+function zeichnen() {
+  const box = $("routinen");
+  box.replaceChildren();
+  routinen.forEach((r, ri) => {
+    let loeschTimer = null;
+    const loeschen = el("button", {class: "klein", title: "Routine löschen (2× tippen)"}, "✕");
+    loeschen.addEventListener("click", () => {
+      if (loeschTimer) { clearTimeout(loeschTimer); routinen.splice(ri, 1); aendern(true); return; }
+      loeschen.classList.add("loeschen-sicher"); loeschen.textContent = "?";
+      loeschTimer = setTimeout(() => { loeschTimer = null; loeschen.classList.remove("loeschen-sicher"); loeschen.textContent = "✕"; }, 2500);
+    });
+    const anzahl = r.tasks.filter(a => sauber(a.t)).length;
+    const karte = el("section", {class: "routine" + (r.zu ? " zu" : "")},
+      el("div", {class: "kopf"},
+        el("button", {class: "klapp", title: r.zu ? "Aufklappen" : "Zuklappen", "aria-expanded": r.zu ? "false" : "true",
+          onclick: () => { r.zu = !r.zu; aendern(true); }}, r.zu ? "▸" : "▾"),
+        el("input", {value: r.name, placeholder: "Name der Routine", "aria-label": "Name der Routine",
+          oninput: e => { r.name = e.target.value; aendern(); }}),
+        r.zu ? el("span", {class: "anzahl"}, anzahl + (anzahl === 1 ? " Aufgabe" : " Aufgaben")) : null,
+        el("button", {class: "klein", title: "nach oben", onclick: () => verschieben(routinen, ri, -1)}, "↑"),
+        el("button", {class: "klein", title: "nach unten", onclick: () => verschieben(routinen, ri, 1)}, "↓"),
+        loeschen));
+    if (r.zu) { box.append(karte); return; }
+    r.tasks.forEach((_, i) => karte.append(zeichneAufgabe(r, i)));
+    karte.append(el("button", {class: "plus", onclick: () => {
+      r.tasks.push({t: "", d: "", m: "", r: "", w: null}); aendern(true);
+      const felder = karte.parentNode.querySelectorAll(".routine")[ri].querySelectorAll("input.name");
+      felder[felder.length - 1].focus();
+    }}, "+ Aufgabe"));
+    box.append(karte);
+  });
+}
+
+function status(text, art, fest) {
+  const s = $("status");
+  s.textContent = text; s.className = art || "";
+  if (fest) s.dataset.fest = "1"; else delete s.dataset.fest;
+}
+
+// ---------- Bluetooth (Nordic UART, wie die Espruino Web IDE) ----------
+const NUS = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+const NUS_TX = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
+const NUS_RX = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
+let geraet = null, tx = null, rx = null, empfang = "";
+
+function empfangen(e) {
+  const b = new Uint8Array(e.target.value.buffer);
+  for (let i = 0; i < b.length; i++) empfang += String.fromCharCode(b[i]);
+}
+
+async function verbinden() {
+  if (!navigator.bluetooth) throw new Error("Dieser Browser kann kein Bluetooth. Bitte Chrome oder Edge nutzen, auf dem iPhone die App „Bluefy“.");
+  if (!geraet) {
+    geraet = await navigator.bluetooth.requestDevice({filters: [{namePrefix: "Bangle"}], optionalServices: [NUS]});
+    geraet.addEventListener("gattserverdisconnected", () => { tx = null; });
+  }
+  if (!geraet.gatt.connected || !tx) {
+    status("Verbinde mit " + (geraet.name || "der Uhr") + " …", "", true);
+    const server = await geraet.gatt.connect();
+    const dienst = await server.getPrimaryService(NUS);
+    tx = await dienst.getCharacteristic(NUS_TX);
+    if (rx) rx.removeEventListener("characteristicvaluechanged", empfangen);
+    rx = await dienst.getCharacteristic(NUS_RX);
+    rx.addEventListener("characteristicvaluechanged", empfangen);
+    await rx.startNotifications();
+  }
+}
+
+function trennen() { try { if (geraet && geraet.gatt.connected) geraet.gatt.disconnect(); } catch (e) {} }
+
+async function senden(text) {
+  for (let i = 0; i < text.length; i += 20) {
+    const teil = text.slice(i, i + 20);
+    const bytes = new Uint8Array(teil.length);
+    for (let k = 0; k < teil.length; k++) bytes[k] = teil.charCodeAt(k) & 255;
+    await tx.writeValue(bytes);
+  }
+}
+
+// Befehl auf der Uhr ausfuehren und auf die Endmarke warten
+async function befehl(code, ende, zeit) {
+  empfang = "";
+  await senden("\x03\x10" + code + "\n");
+  const bis = Date.now() + (zeit || 8000);
+  while (Date.now() < bis) {
+    if (empfang.includes(ende)) return empfang;
+    const fehler = empfang.match(/Uncaught [^\r\n]*/);
+    if (fehler) throw new Error("Die Uhr meldet: " + fehler[0]);
+    await new Promise(r => setTimeout(r, 100));
+  }
+  throw new Error("Die Uhr antwortet nicht. Ist sie noch mit einem anderen Gerät verbunden?");
+}
+
+async function mitUhr(aktion) {
+  const knoepfe = document.querySelectorAll("header button, #btnSymbol");
+  knoepfe.forEach(b => b.disabled = true);
+  try { await verbinden(); await aktion(); }
+  catch (e) {
+    if (e && e.name === "NotFoundError") status("Keine Uhr gewählt.", "fehler", true);
+    else status(e.message || String(e), "fehler", true);
+  }
+  finally { trennen(); knoepfe.forEach(b => b.disabled = false); }
+}
+
+$("btnLaden").addEventListener("click", () => mitUhr(async () => {
+  status("Lade Aufgaben von der Uhr …", "", true);
+  const antwort = await befehl('print("#R"+"J#"+JSON.stringify(require("Storage").readJSON("routine.json",1)||null)+"#E"+"ND#")', "#END#");
+  let text = antwort.slice(antwort.indexOf("#RJ#") + 4, antwort.indexOf("#END#"));
+  text = text.replace(/\\x([0-9a-fA-F]{2})/g, "\\u00$1");
+  const obj = JSON.parse(text);
+  if (!obj) { status("Auf der Uhr ist noch keine routine.json – die App nutzt ihre Standard-Aufgaben. Einfach bearbeiten und speichern.", "", true); return; }
+  routinen = ausJSON(obj);
+  gespeichertStand = JSON.stringify(zuJSON());
+  zeichnen(); entwurfSpeichern();
+  status("Geladen: " + routinen.length + " Routinen von der Uhr.", "ok", true);
+}));
+
+$("btnSpeichern").addEventListener("click", () => {
+  const problem = pruefen();
+  if (problem) { status(problem, "fehler", true); return; }
+  mitUhr(async () => {
+    status("Speichere auf der Uhr …", "", true);
+    const obj = zuJSON();
+    await befehl('require("Storage").writeJSON("routine.json",' + fuerUhr(obj) + ');print("#O"+"K#")', "#OK#", 15000);
+    gespeichertStand = JSON.stringify(obj);
+    status("Gespeichert! Auf der Uhr die Routine-App neu öffnen.", "ok", true);
+  });
+});
+
+$("btnSymbol").addEventListener("click", () => mitUhr(async () => {
+  status("Lege Symbol und App-Eintrag an …", "", true);
+  const antwort = await befehl('var s=require("Storage");s.write("routine.img",atob("' + SYMBOL + '"));s.writeJSON("routine.info",' +
+    JSON.stringify(INFO) + ');print("#O"+"K#"+(s.read("routine.app.js")?"J":"N"))', "#OK#", 10000);
+  const hatApp = antwort.includes("#OK#J");
+  status(hatApp ? "Symbol und App-Eintrag sind auf der Uhr." :
+    "Symbol und App-Eintrag sind auf der Uhr – aber routine.app.js fehlt noch. Bitte einmal über die Web IDE hochladen.", hatApp ? "ok" : "fehler", true);
+}));
+
+$("btnSkript").addEventListener("click", () => {
+  const problem = pruefen();
+  if (problem) { status(problem, "fehler", true); return; }
+  $("skript").value =
+    "// Erzeugt von der Routine-Web-App. In die linke Konsole der Espruino Web IDE einfuegen, Enter.\n" +
+    'var s = require("Storage");\n' +
+    's.write("routine.img", atob("' + SYMBOL + '"));\n' +
+    's.writeJSON("routine.info", ' + JSON.stringify(INFO) + ');\n' +
+    's.writeJSON("routine.json", ' + fuerUhr(zuJSON()) + ');\n';
+});
+$("btnKopieren").addEventListener("click", async () => {
+  if (!$("skript").value) $("btnSkript").click();
+  try { await navigator.clipboard.writeText($("skript").value); status("Code kopiert.", "ok", true); }
+  catch (e) { $("skript").select(); status("Bitte den markierten Text selbst kopieren.", "", true); }
+});
+$("btnStandard").addEventListener("click", () => {
+  routinen = ausJSON(STANDARD); aendern(true);
+  status("Standard-Aufgaben geladen – zum Übernehmen „Auf Uhr speichern“.", "", true);
+});
+$("btnNeueRoutine").addEventListener("click", () => {
+  routinen.push({name: "Neue Routine", zu: false, tasks: [{t: "", d: "", m: "", r: "", w: null}]});
+  aendern(true);
+  const karten = document.querySelectorAll(".routine");
+  karten[karten.length - 1].querySelector(".kopf input").select();
+});
+
+// ---------- Start ----------
+routinen = entwurfLaden() || ausJSON(STANDARD);
+zeichnen();
+status(navigator.bluetooth ? "Tipp: Zuerst „Von Uhr laden“." :
+  "Dieser Browser kann kein Bluetooth – bitte Chrome/Edge nutzen, auf dem iPhone „Bluefy“.", navigator.bluetooth ? "" : "fehler", true);
+</script>
+</body>
+</html>
